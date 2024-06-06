@@ -1,0 +1,103 @@
+on:
+  push:
+    branches:
+      - 'main'
+
+name: Create Release
+
+env:
+  NAME: example-app
+  ENVIRONMENT: prod
+
+jobs:
+  # Step 1: Check for changes in specific files and build dependencies if needed
+  check-deps:
+    uses: ./.github/workflows/build-dependencies.yaml
+    secrets: inherit
+    permissions:
+      pull-requests: read
+      contents: read
+
+  # Step 2: Build binaries for Linux and Windows
+  build-bin-win:
+    name: Build Windows Binary
+    runs-on: ubuntu-latest
+    needs: [ check-deps ]
+
+    container:
+      image: "docker.io/jedich/crossbuild-with-deps:main"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+        # crossbuild binary is in the root of the build-dependencies container
+      - name: Build Windows executable
+        env:
+          SUFFIX: windows-amd64.exe
+          CGO_ENABLED: 1
+          ENV: ${{ env.ENVIRONMENT }}
+        run: |
+          /crossbuild -p "windows/amd64" --build-cmd "make build-ci"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: main
+          path: ./bin/
+
+  build-bin-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    needs: [ check-deps ]
+
+    container:
+      image: "docker.io/jedich/crossbuild-with-deps:main"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+        # crossbuild binary is in the root of the build-dependencies container
+      - name: Build Linux executable
+        env:
+          SUFFIX: linux-amd64
+          CGO_ENABLED: 1
+          ENV: ${{ env.ENVIRONMENT }}
+        run: |
+          /crossbuild -p "linux/amd64" --build-cmd "make build-ci"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: main
+          path: ./bin/
+
+  # Step 3: Create a release for the production environment with created binaries
+  push-prod:
+    needs: [ build-bin-win, build-bin-linux ]
+    name: Create Release Production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Get built binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: main
+          path: ./bin/
+
+      - name: Create Zip
+        run: |
+          zip -jr ./bin/${{ env.NAME }}-${{ env.ENVIRONMENT }}.zip ./bin/
+
+      # Create a Github release here or upload the zip file to an S3 bucket, etc.
+      
+      # - name: Configure AWS Credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: ${{ secrets.AWS_REGION }}
+      

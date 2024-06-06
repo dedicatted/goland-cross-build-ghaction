@@ -1,1 +1,1 @@
-# goland-cross-build-ghaction
+# golang-cross-build-ghaction

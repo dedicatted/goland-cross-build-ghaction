@@ -1,0 +1,71 @@
+name: Build Dependency Image
+
+env:
+  GO_VERSION: '1.22.3'
+  REGISTRY: 'docker.io'
+  IMAGE_NAME: 'crossbuild-with-deps'
+
+  WIN_LINUX_TAG: 'main'
+  DARWIN_TAG: 'darwin-arm64-debian10'
+
+on:
+  workflow_call:
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    name: Check for changes in dependencies
+    permissions:
+      pull-requests: read
+      contents: read
+    outputs:
+      main: ${{ steps.filter.outputs.main }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            main:
+              - 'Dockerfile.dependencies'
+              - 'go.mod'
+
+  build-push-deps:
+    name: Build and Push Dependency Image
+    runs-on: ubuntu-latest
+    needs: [ check-changes ]
+    if: ${{ needs.check-changes.outputs.main == 'true' }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image Win/Linux
+        id: push-win-linux
+        uses: docker/build-push-action@master
+        with:
+          context: .
+          file: Dockerfile.dependencies
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:main
+          build-args: |
+            GO_VERSION=${{ env.GO_VERSION }}
+            ARCH=${{ env.WIN_LINUX_TAG }}
+
+      - name: Build and push Docker image Darwin
+        id: push-darwin
+        uses: docker/build-push-action@master
+        with:
+          context: .
+          file: Dockerfile.dependencies
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:darwin
+          build-args: |
+            GO_VERSION=${{ env.GO_VERSION }}
+            ARCH=${{ env.DARWIN_TAG }}

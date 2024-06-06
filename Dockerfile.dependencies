@@ -1,0 +1,15 @@
+ARG GO_VERSION=1.22.3
+ARG ARCH=main
+
+FROM docker.elastic.co/beats-dev/golang-crossbuild:${GO_VERSION}-${ARCH} as deps
+
+RUN apt-get update && apt-get install -y \
+  git
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+
+RUN go mod download
+
+ENTRYPOINT ["/bin/sh", "-c"]
